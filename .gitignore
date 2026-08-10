@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Node
+frontend/node_modules/
+
+# Generated outputs (regenerated on run)
+stock_prices_weekly.csv
+stock_prices_weekly.xlsx
+share_price_performance.png
+share_price_performance_last_year_v2.png
+
+# macOS
+.DS_Store
+
+# Claude
+.claude/

@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Share Price Performance Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: white;
+      border-bottom: 1px solid #e8eaed;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .header-left h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a1a2e;
+      letter-spacing: -0.3px;
+    }
+    .header-left .subtitle {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 3px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    #last-updated {
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .btn-refresh {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: white;
+      color: #374151;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-refresh:hover { background: #f9fafb; border-color: #9ca3af; }
+    .btn-refresh:active { background: #f3f4f6; }
+    .btn-refresh svg { width: 14px; height: 14px; }
+    .btn-refresh.loading svg { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Main layout ── */
+    .main { max-width: 1600px; margin: 0 auto; padding: 24px 32px; }
+
+    /* ── Cards ── */
+    .card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title .badge {
+      font-size: 11px;
+      font-weight: 500;
+      background: #f3f4f6;
+      color: #6b7280;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    /* ── Section 1: Static charts ── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 1000px) { .charts-grid { grid-template-columns: 1fr; } }
+
+    .chart-box {
+      position: relative;
+      min-height: 180px;
+    }
+    .chart-box img {
+      width: 100%;
+      height: auto;
+      display: block;
+      border-radius: 4px;
+    }
+    .chart-skeleton {
+      background: #f3f4f6;
+      border-radius: 4px;
+      height: 220px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Section 2: Interactive chart ── */
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+    }
+    .tab-btn {
+      padding: 6px 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background: white;
+      color: #6b7280;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: #1a1a2e;
+      color: white;
+      border-color: #1a1a2e;
+    }
+    .tab-btn:hover:not(.active) { background: #f9fafb; }
+    #plotly-chart { width: 100%; min-height: 380px; }
+    #plotly-skeleton {
+      background: #f3f4f6;
+      border-radius: 4px;
+      height: 380px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Section 3: Table ── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      text-align: left;
+      padding: 10px 14px;
+      border-bottom: 2px solid #e5e7eb;
+      color: #6b7280;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    thead th:hover { color: #374151; }
+    thead th.sorted-asc::after  { content: " ▲"; font-size: 10px; }
+    thead th.sorted-desc::after { content: " ▼"; font-size: 10px; }
+    tbody tr { border-bottom: 1px solid #f3f4f6; transition: background 0.1s; }
+    tbody tr:hover { background: #fafafa; }
+    tbody td { padding: 11px 14px; color: #374151; }
+    .company-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+    }
+    .company-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .badge-val {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .badge-pos { color: #15803d; background: #dcfce7; }
+    .badge-neg { color: #b91c1c; background: #fee2e2; }
+    .badge-zero { color: #6b7280; background: #f3f4f6; }
+    .table-skeleton td { background: #f3f4f6; border-radius: 4px; color: transparent; }
+
+    /* ── Spinner ── */
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #6b7280;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* ── Print styles ── */
+    @media print {
+      .header-right, .tab-bar, .btn-refresh { display: none !important; }
+      body { background: white; }
+      .card { box-shadow: none; border: 1px solid #e5e7eb; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+  <div class="header-left">
+    <h1>Share Price Performance Dashboard</h1>
+    <div class="subtitle">Oracle · SAP · ServiceNow · Salesforce · Workday · Nasdaq · DAX</div>
+  </div>
+  <div class="header-right">
+    <span id="last-updated">Loading...</span>
+    <button class="btn-refresh" id="refresh-btn" title="Data cached for 1 hour. Click to reload.">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"></polyline>
+        <polyline points="1 20 1 14 7 14"></polyline>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+      </svg>
+      Refresh
+    </button>
+  </div>
+</header>
+
+<!-- ── Main ── -->
+<main class="main">
+
+  <!-- Section 1: Static Charts -->
+  <div class="card">
+    <div class="card-title">
+      Static Charts
+      <span class="badge">300 dpi · right-click to save</span>
+    </div>
+    <div class="charts-grid">
+      <div class="chart-box">
+        <div class="chart-label" style="font-size:12px;color:#6b7280;margin-bottom:8px;">Since January 2020</div>
+        <div id="skeleton-chart1" class="chart-skeleton"><div class="spinner"></div></div>
+        <a id="link-chart1" href="#" download="share_price_since_2020.png" style="display:none;">
+          <img id="img-chart1" alt="Share price performance since 2020" />
+        </a>
+      </div>
+      <div class="chart-box">
+        <div class="chart-label" style="font-size:12px;color:#6b7280;margin-bottom:8px;">Year to Date</div>
+        <div id="skeleton-chart2" class="chart-skeleton"><div class="spinner"></div></div>
+        <a id="link-chart2" href="#" download="share_price_ytd.png" style="display:none;">
+          <img id="img-chart2" alt="Share price performance year to date" />
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Interactive Chart -->
+  <div class="card">
+    <div class="card-title">
+      Interactive Chart
+      <span class="badge">hover to inspect · camera icon to download</span>
+    </div>
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-2020" onclick="switchTab('2020')">Since 2020</button>
+      <button class="tab-btn" id="tab-ytd" onclick="switchTab('ytd')">Year to Date</button>
+    </div>
+    <div id="plotly-skeleton"><div class="spinner"></div></div>
+    <div id="plotly-chart" style="display:none;"></div>
+  </div>
+
+  <!-- Section 3: Performance Table -->
+  <div class="card">
+    <div class="card-title">Latest Performance</div>
+    <div class="table-wrap">
+      <table id="perf-table">
+        <thead>
+          <tr>
+            <th onclick="sortTable(0)" id="th-0">Company</th>
+            <th onclick="sortTable(1)" id="th-1" class="sorted-desc">Since 2020</th>
+            <th onclick="sortTable(2)" id="th-2">Year to Date</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <!-- skeleton rows -->
+          <tr class="table-skeleton"><td>—</td><td>—</td><td>—</td></tr>
+          <tr class="table-skeleton"><td>—</td><td>—</td><td>—</td></tr>
+          <tr class="table-skeleton"><td>—</td><td>—</td><td>—</td></tr>
+          <tr class="table-skeleton"><td>—</td><td>—</td><td>—</td></tr>
+          <tr class="table-skeleton"><td>—</td><td>—</td><td>—</td></tr>
+          <tr class="table-skeleton"><td>—</td><td>—</td><td>—</td></tr>
+          <tr class="table-skeleton"><td>—</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  let apiData = null;
+  let currentTab = "2020";
+  let sortCol = 1, sortAsc = false;
+
+  // ── Fetch data ────────────────────────────────────────────────────────────
+  async function loadData(bust) {
+    setLoading(true);
+    try {
+      const qs = bust ? `?t=${Date.now()}` : "";
+      const [chartsRes, dataRes] = await Promise.all([
+        fetch("/api/charts" + qs),
+        fetch("/api/data"   + qs),
+      ]);
+      const chartsJson = await chartsRes.json();
+      const dataJson   = await dataRes.json();
+
+      apiData = { ...dataJson, ...chartsJson };
+      renderCharts(chartsJson);
+      renderPlotly(currentTab);
+      renderTable();
+      updateTimestamp(chartsJson.updated_at);
+    } catch (err) {
+      document.getElementById("last-updated").textContent = "Error loading data";
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function setLoading(on) {
+    const btn = document.getElementById("refresh-btn");
+    btn.classList.toggle("loading", on);
+    btn.disabled = on;
+  }
+
+  // ── Section 1: Static PNG charts ────────────────────────────────────────
+  function renderCharts(data) {
+    ["chart1", "chart2"].forEach((id, i) => {
+      const key  = i === 0 ? "chart_2020" : "chart_ytd";
+      const img  = document.getElementById(`img-${id}`);
+      const link = document.getElementById(`link-${id}`);
+      const skel = document.getElementById(`skeleton-${id}`);
+      const src  = `data:image/png;base64,${data[key]}`;
+      img.src    = src;
+      link.href  = src;
+      skel.style.display = "none";
+      link.style.display = "block";
+    });
+  }
+
+  // ── Section 2: Plotly interactive chart ─────────────────────────────────
+  function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById("tab-2020").classList.toggle("active", tab === "2020");
+    document.getElementById("tab-ytd").classList.toggle("active",  tab === "ytd");
+    if (apiData) renderPlotly(tab);
+  }
+
+  function renderPlotly(view) {
+    if (!apiData) return;
+    const key  = view === "2020" ? "perf_2020" : "perf_ytd";
+    const perf = apiData[key];
+
+    const traces = Object.entries(perf).map(([company, points]) => ({
+      x: points.map(p => p.date),
+      y: points.map(p => p.value),
+      name: company,
+      type: "scatter",
+      mode: "lines",
+      line: { color: apiData.colors[company], width: 2 },
+      hovertemplate: `<b>${company}</b>: %{y:+.1f}%<extra></extra>`,
+    }));
+
+    const layout = {
+      paper_bgcolor: "white",
+      plot_bgcolor:  "white",
+      margin: { t: 16, r: 20, b: 60, l: 50 },
+      hovermode: "x unified",
+      xaxis: {
+        showgrid: true,
+        gridcolor: "#f0f0f0",
+        linecolor: "#cccccc",
+        tickfont: { size: 11, color: "#6b7280" },
+      },
+      yaxis: {
+        ticksuffix: "%",
+        tickfont:   { size: 11, color: "#6b7280" },
+        gridcolor:  "#f0f0f0",
+        zeroline:   true,
+        zerolinecolor: "#cccccc",
+        zerolinewidth: 1,
+      },
+      legend: {
+        orientation: "h",
+        y: -0.18,
+        x: 0.5,
+        xanchor: "center",
+        font: { size: 12 },
+      },
+      hoverlabel: {
+        font: { size: 12 },
+      },
+    };
+
+    const config = {
+      responsive: true,
+      displayModeBar: true,
+      modeBarButtonsToRemove: ["select2d", "lasso2d", "autoScale2d"],
+      toImageButtonOptions: {
+        filename: view === "2020" ? "share_price_since_2020" : "share_price_ytd",
+        scale: 2,
+        format: "png",
+      },
+    };
+
+    document.getElementById("plotly-skeleton").style.display = "none";
+    const el = document.getElementById("plotly-chart");
+    el.style.display = "block";
+    Plotly.newPlot("plotly-chart", traces, layout, config);
+  }
+
+  // ── Section 3: Table ────────────────────────────────────────────────────
+  function renderTable() {
+    if (!apiData) return;
+    const tbody = document.getElementById("table-body");
+    const rows = Object.entries(apiData.final_perf).map(([company, vals]) => ({
+      company,
+      since2020: vals.since_2020,
+      ytd:       vals.ytd,
+      color:     apiData.colors[company],
+    }));
+    applySort(rows);
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>
+          <div class="company-cell">
+            <span class="company-dot" style="background:${r.color}"></span>
+            ${r.company}
+          </div>
+        </td>
+        <td>${fmtBadge(r.since2020)}</td>
+        <td>${fmtBadge(r.ytd)}</td>
+      </tr>
+    `).join("");
+  }
+
+  function fmtBadge(val) {
+    if (val === null || val === undefined) return '<span class="badge-val badge-zero">—</span>';
+    const sign = val >= 0 ? "+" : "";
+    const cls  = val > 0 ? "badge-pos" : val < 0 ? "badge-neg" : "badge-zero";
+    return `<span class="badge-val ${cls}">${sign}${val.toFixed(1)}%</span>`;
+  }
+
+  function applySort(rows) {
+    rows.sort((a, b) => {
+      let va, vb;
+      if (sortCol === 0) { va = a.company; vb = b.company; }
+      else if (sortCol === 1) { va = a.since2020 ?? -Infinity; vb = b.since2020 ?? -Infinity; }
+      else { va = a.ytd ?? -Infinity; vb = b.ytd ?? -Infinity; }
+      if (va < vb) return sortAsc ? -1 : 1;
+      if (va > vb) return sortAsc ?  1 : -1;
+      return 0;
+    });
+  }
+
+  function sortTable(col) {
+    if (sortCol === col) sortAsc = !sortAsc;
+    else { sortCol = col; sortAsc = false; }
+    ["th-0","th-1","th-2"].forEach((id, i) => {
+      const th = document.getElementById(id);
+      th.className = i === sortCol ? (sortAsc ? "sorted-asc" : "sorted-desc") : "";
+    });
+    if (apiData) renderTable();
+  }
+
+  // ── Timestamp ────────────────────────────────────────────────────────────
+  function updateTimestamp(iso) {
+    const d = new Date(iso);
+    const fmt = d.toLocaleString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+      hour: "2-digit", minute: "2-digit", timeZoneName: "short",
+    });
+    document.getElementById("last-updated").textContent = `Last updated: ${fmt}`;
+  }
+
+  // ── Refresh button ───────────────────────────────────────────────────────
+  document.getElementById("refresh-btn").addEventListener("click", () => loadData(true));
+
+  // ── Init ─────────────────────────────────────────────────────────────────
+  loadData(false);
+</script>
+</body>
+</html>
