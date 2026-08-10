@@ -3,5 +3,5 @@ matplotlib
 fastapi
 uvicorn[standard]
 pillow
-pandas
+pandas==2.2.2
 numpy
