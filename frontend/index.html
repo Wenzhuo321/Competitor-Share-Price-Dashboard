@@ -429,11 +429,11 @@
 </main>
 
 <script>
-  // In production (Vercel), VITE_BACKEND_URL points to Railway backend.
-  // In local dev, empty string → proxy via Vite to localhost:8000.
-  const API_BASE = (typeof __BACKEND_URL__ !== 'undefined' && __BACKEND_URL__)
-    ? __BACKEND_URL__
-    : '';
+  // Local dev: Vite proxy handles /api → localhost:8000
+  // Production: direct call to Railway backend
+  const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname.startsWith('172.') || window.location.hostname.startsWith('10.')
+    ? ''
+    : 'https://competitor-share-price-dashboard-production.up.railway.app';
 
   let apiData = null;
   let currentTab = "2020";
