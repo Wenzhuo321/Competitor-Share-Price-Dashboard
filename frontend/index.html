@@ -297,6 +297,53 @@
       body { background: white; }
       .card { box-shadow: none; border: 1px solid #e5e7eb; }
     }
+
+    /* ── Mobile ── */
+    @media (max-width: 640px) {
+      .header { padding: 14px 16px; gap: 10px; }
+      .header-left h1 { font-size: 16px; }
+      .header-left .subtitle { font-size: 11px; }
+      #last-updated { font-size: 11px; }
+
+      .main { padding: 12px 12px; }
+      .card { padding: 16px 12px; margin-bottom: 16px; }
+      .card-title { font-size: 13px; flex-wrap: wrap; }
+
+      /* Controls: stack vertically */
+      .chart-controls { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .ctrl-group { flex-wrap: wrap; gap: 4px; }
+      .ctrl-label { min-width: 52px; }
+      .date-input { font-size: 12px; padding: 5px 8px; width: 120px; }
+
+      /* Legend moves below chart on mobile */
+      .chart-with-legend { flex-direction: column; }
+      .custom-legend {
+        flex-direction: row; flex-wrap: wrap;
+        min-width: 0; width: 100%;
+        gap: 4px; padding-top: 8px;
+      }
+      .legend-item { padding: 4px 8px; }
+      .legend-logo { height: 14px; }
+
+      /* Plotly chart shorter on mobile */
+      #plotly-chart { min-height: 260px; }
+      #plotly-skeleton { height: 260px; }
+
+      /* Static charts full width already, just reduce skeleton */
+      .chart-skeleton { height: 140px; }
+
+      /* Table: smaller text and padding */
+      table { font-size: 12px; }
+      thead th { padding: 8px 8px; font-size: 11px; }
+      tbody td { padding: 8px 8px; }
+      .badge-val { font-size: 11px; padding: 2px 6px; }
+    }
+
+    @media (max-width: 400px) {
+      .header-left h1 { font-size: 14px; }
+      .tab-btn { padding: 5px 10px; font-size: 12px; }
+      .btn-apply { padding: 5px 8px; font-size: 11px; }
+    }
   </style>
 </head>
 <body>
