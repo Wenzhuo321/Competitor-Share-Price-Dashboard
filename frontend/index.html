@@ -508,8 +508,12 @@
     if (!apiData) return;
     const src = tab === "2020" ? apiData.perf_2020 : apiData.perf_ytd;
     const pts = src["Oracle"];
-    document.getElementById("date-from").value = pts[0].date;
-    document.getElementById("date-to").value   = pts[pts.length - 1].date;
+    const today = new Date().toISOString().split("T")[0];
+    const startDate = tab === "2020" ? "2020-01-01" : new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    // Cap end date at today to avoid future dates from yfinance
+    const lastDate = pts[pts.length - 1].date > today ? today : pts[pts.length - 1].date;
+    document.getElementById("date-from").value = startDate;
+    document.getElementById("date-to").value   = lastDate;
     customFrom = null;
     customTo   = null;
   }
