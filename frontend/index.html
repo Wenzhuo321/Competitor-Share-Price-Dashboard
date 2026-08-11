@@ -84,7 +84,9 @@
       margin-bottom: 16px;
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 8px;
+      flex-wrap: wrap;
     }
     .card-title .badge {
       font-size: 11px;
@@ -373,35 +375,25 @@
   <!-- Section 1: Interactive Chart -->
   <div class="card">
     <div class="card-title">
-      Interactive Chart
-      <span class="badge">hover · zoom · download</span>
+      <span>Interactive Chart</span>
+      <div style="margin-left:auto; display:flex; gap:4px; flex-wrap:wrap;">
+        <button class="tab-btn active" id="metric-pct" onclick="switchMetric('pct')">% Performance</button>
+        <button class="tab-btn" id="metric-price" onclick="switchMetric('price')">Price (USD)</button>
+      </div>
     </div>
     <div class="chart-controls">
-      <!-- Time range tabs -->
-      <div class="ctrl-group">
-        <span class="ctrl-label">Range:</span>
-        <div class="tab-bar" style="margin-bottom:0;">
-          <button class="tab-btn active" id="tab-2020" onclick="switchTab('2020')">Since 2020</button>
-          <button class="tab-btn" id="tab-ytd" onclick="switchTab('ytd')">Year to Date</button>
-        </div>
+      <div class="tab-bar" style="margin-bottom:0;">
+        <button class="tab-btn active" id="tab-2020" onclick="switchTab('2020')">Since 2020</button>
+        <button class="tab-btn" id="tab-ytd" onclick="switchTab('ytd')">This Year</button>
+        <button class="tab-btn" id="tab-custom" onclick="switchTab('custom')">Custom</button>
       </div>
-      <!-- Metric toggle -->
-      <div class="ctrl-group">
-        <span class="ctrl-label">Metric:</span>
-        <div class="tab-bar" style="margin-bottom:0;">
-          <button class="tab-btn active" id="metric-pct" onclick="switchMetric('pct')">% Performance</button>
-          <button class="tab-btn" id="metric-price" onclick="switchMetric('price')">Price (USD / EUR)</button>
-        </div>
-      </div>
-      <!-- Custom date range -->
-      <div class="ctrl-group">
-        <span class="ctrl-label">Custom:</span>
-        <input type="date" id="date-from" class="date-input" />
-        <span class="ctrl-sep">→</span>
-        <input type="date" id="date-to" class="date-input" />
-        <button class="btn-apply" onclick="applyCustomRange()">Apply</button>
-        <button class="btn-apply" onclick="resetDateRange()" style="background:#6b7280;">Reset</button>
-      </div>
+    </div>
+    <div id="custom-date-row" style="display:none; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:14px;">
+      <input type="date" id="date-from" class="date-input" />
+      <span class="ctrl-sep">→</span>
+      <input type="date" id="date-to" class="date-input" />
+      <button class="btn-apply" onclick="applyCustomRange()">Apply</button>
+      <button class="btn-apply" onclick="resetDateRange()" style="background:#6b7280;">Reset</button>
     </div>
     <div id="plotly-skeleton"><div class="spinner"></div></div>
     <div class="chart-with-legend" style="display:none;" id="chart-with-legend">
@@ -539,39 +531,46 @@
   // ── Date inputs init ──────────────────────────────────────────────────────
   function initDateInputs() {
     if (!apiData) return;
-    // Use the full 2020 dataset range as the absolute bounds
-    const all = apiData.perf_2020["Oracle"];
+    const all     = apiData.prices_2020["Oracle"];
     const minDate = all[0].date;
-    const maxDate = all[all.length - 1].date;
-    const fromEl = document.getElementById("date-from");
-    const toEl   = document.getElementById("date-to");
-    fromEl.min = minDate; fromEl.max = maxDate;
-    toEl.min   = minDate; toEl.max   = maxDate;
-    // Default to current tab range
+    const today   = new Date().toISOString().split("T")[0];
+    const fromEl  = document.getElementById("date-from");
+    const toEl    = document.getElementById("date-to");
+    fromEl.min = minDate; fromEl.max = today;
+    toEl.min   = minDate; toEl.max   = today;
     setDateInputsToTab(currentTab);
   }
 
   function setDateInputsToTab(tab) {
     if (!apiData) return;
-    const src = tab === "2020" ? apiData.perf_2020 : apiData.perf_ytd;
-    const pts = src["Oracle"];
-    const today = new Date().toISOString().split("T")[0];
-    const startDate = tab === "2020" ? "2020-01-01" : new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
-    // Cap end date at today to avoid future dates from yfinance
-    const lastDate = pts[pts.length - 1].date > today ? today : pts[pts.length - 1].date;
-    document.getElementById("date-from").value = startDate;
-    document.getElementById("date-to").value   = lastDate;
-    customFrom = null;
-    customTo   = null;
+    const today     = new Date().toISOString().split("T")[0];
+    const yearStart = new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    if (tab === "2020") {
+      document.getElementById("date-from").value = "2020-01-01";
+      document.getElementById("date-to").value   = today;
+    } else if (tab === "ytd") {
+      document.getElementById("date-from").value = yearStart;
+      document.getElementById("date-to").value   = today;
+    }
   }
 
   // ── Section 2: Plotly interactive chart ──────────────────────────────────
   function switchTab(tab) {
     currentTab = tab;
-    document.getElementById("tab-2020").classList.toggle("active", tab === "2020");
-    document.getElementById("tab-ytd").classList.toggle("active",  tab === "ytd");
-    setDateInputsToTab(tab);
-    renderPlotly();
+    ["tab-2020","tab-ytd","tab-custom"].forEach(id => {
+      document.getElementById(id).classList.toggle("active", id === `tab-${tab}`);
+    });
+    const row = document.getElementById("custom-date-row");
+    if (tab === "custom") {
+      row.style.display = "flex";
+      if (!document.getElementById("date-from").value) setDateInputsToTab("2020");
+    } else {
+      row.style.display = "none";
+      customFrom = null;
+      customTo   = null;
+      setDateInputsToTab(tab);
+      renderPlotly();
+    }
   }
 
   function switchMetric(metric) {
@@ -591,46 +590,48 @@
   }
 
   function resetDateRange() {
-    setDateInputsToTab(currentTab);
-    renderPlotly();
-  }
-
-  function filterByDate(points, from, to) {
-    if (!from && !to) return points;
-    return points.filter(p => (!from || p.date >= from) && (!to || p.date <= to));
+    customFrom = null;
+    customTo   = null;
+    switchTab("2020");
   }
 
   function renderPlotly() {
     if (!apiData) return;
 
-    const isPct   = currentMetric === "pct";
-    const srcPerf = currentTab === "2020" ? apiData.perf_2020   : apiData.perf_ytd;
-    const srcPrc  = currentTab === "2020" ? apiData.prices_2020 : apiData.prices_ytd;
-    const src     = isPct ? srcPerf : srcPrc;
+    const isPct = currentMetric === "pct";
+    const today = new Date().toISOString().split("T")[0];
+    const from  = customFrom || (currentTab === "ytd"
+      ? new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0]
+      : "2020-01-01");
+    const to = customTo || today;
 
-    // In price mode: indices (Nasdaq, DAX) go on right axis — they trade ~10k-25k
-    // Individual stocks (Oracle, SAP, ServiceNow, Salesforce, Workday) go on left axis — ~50-500
     const indexCompanies = new Set(["Nasdaq", "DAX"]);
-    const eurCompanies   = new Set([]);  // DAX converted to USD server-side
 
-    const traces = Object.entries(src).map(([company, allPoints]) => {
-      const points  = filterByDate(allPoints, customFrom, customTo);
-      const onRight = !isPct && indexCompanies.has(company);
-      const isEur   = !isPct && eurCompanies.has(company);
-      const currency = isEur ? "EUR" : "USD";
+    const traces = Object.entries(apiData.prices_2020).map(([company, allPoints]) => {
+      const filtered = allPoints.filter(p => p.date >= from && p.date <= to);
+      if (!filtered.length) return null;
+
+      let yValues;
+      if (isPct) {
+        const base = filtered[0].value;
+        yValues = filtered.map(p => +((p.value / base - 1) * 100).toFixed(2));
+      } else {
+        yValues = filtered.map(p => p.value);
+      }
+
       return {
-        x: points.map(p => p.date),
-        y: points.map(p => p.value),
+        x: filtered.map(p => p.date),
+        y: yValues,
         name: company,
         type: "scatter",
         mode: "lines",
-        yaxis: onRight ? "y2" : "y",
+        yaxis: (!isPct && indexCompanies.has(company)) ? "y2" : "y",
         line: { color: apiData.colors[company], width: 2, dash: indexCompanies.has(company) ? "dash" : "solid" },
         hovertemplate: isPct
           ? `<b>${company}</b>: %{y:+.1f}%<extra></extra>`
-          : `<b>${company}</b>: %{y:,.2f} ${currency}<extra></extra>`,
+          : `<b>${company}</b>: %{y:,.2f} USD<extra></extra>`,
       };
-    });
+    }).filter(Boolean);
 
     const xaxis = {
       showgrid: true, gridcolor: "#f0f0f0",
@@ -645,8 +646,8 @@
     if (isPct) {
       layout = {
         paper_bgcolor: "white", plot_bgcolor: "white",
-        margin: { t: 16, r: 20, b: 70, l: 60 },
-        hovermode: "x unified",
+        margin: { t: 16, r: 20, b: 20, l: 60 },
+        hovermode: "x unified", showlegend: false,
         xaxis,
         yaxis: {
           ...baseYAxis,
@@ -654,29 +655,26 @@
           ticksuffix: "%",
           zeroline: true, zerolinecolor: "#cccccc", zerolinewidth: 1,
         },
-        legend: { orientation: "h", y: -0.22, x: 0.5, xanchor: "center", font: { size: 12 } },
         hoverlabel: { font: { size: 12 } },
       };
     } else {
-      // Price mode: stocks left (USD/EUR mixed ~50-500), indices right (~10k-25k)
       layout = {
         paper_bgcolor: "white", plot_bgcolor: "white",
-        margin: { t: 30, r: 80, b: 70, l: 70 },
-        hovermode: "x unified",
+        margin: { t: 30, r: 80, b: 20, l: 70 },
+        hovermode: "x unified", showlegend: false,
         xaxis,
         yaxis: {
           ...baseYAxis,
-          title: { text: "Stock Price (USD / EUR)", font: { size: 11, color: "#6b7280" } },
+          title: { text: "Stock Price (USD)", font: { size: 11, color: "#6b7280" } },
         },
         yaxis2: {
           ...baseYAxis,
-          title: { text: "Index Level", font: { size: 11, color: "#6b7280" } },
+          title: { text: "Index Level (USD)", font: { size: 11, color: "#6b7280" } },
           overlaying: "y", side: "right", showgrid: false,
         },
-        legend: { orientation: "h", y: -0.22, x: 0.5, xanchor: "center", font: { size: 12 } },
         hoverlabel: { font: { size: 12 } },
         annotations: [{
-          text: "Left axis: Stock prices (USD) · Right axis: Index levels (Nasdaq, DAX) in USD",
+          text: "Left axis: Stock prices · Right axis: Index levels (Nasdaq, DAX)",
           xref: "paper", yref: "paper",
           x: 0.5, y: 1.04, xanchor: "center", yanchor: "bottom",
           showarrow: false, font: { size: 10, color: "#9ca3af" },
@@ -684,15 +682,9 @@
       };
     }
 
-    const config = { responsive: true, displayModeBar: false };
-
-    // hide built-in legend — we use custom legend instead
-    layout.showlegend = false;
-    layout.margin.b = 20;  // reclaim bottom space previously used by legend
-
     document.getElementById("plotly-skeleton").style.display = "none";
     document.getElementById("chart-with-legend").style.display = "flex";
-    Plotly.newPlot("plotly-chart", traces, layout, config);
+    Plotly.newPlot("plotly-chart", traces, layout, { responsive: true, displayModeBar: false });
     renderLegend(traces);
   }
 
