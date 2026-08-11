@@ -592,14 +592,15 @@
   function resetDateRange() {
     customFrom = null;
     customTo   = null;
-    const today = new Date().toISOString().split("T")[0];
     if (currentTab === "custom") {
+      // Reset date inputs to full range
+      const today = new Date().toISOString().split("T")[0];
       document.getElementById("date-from").value = "2020-01-01";
       document.getElementById("date-to").value   = today;
     } else {
       setDateInputsToTab(currentTab);
+      renderPlotly();
     }
-    renderPlotly();
   }
 
   function renderPlotly() {
@@ -643,8 +644,6 @@
     const xaxis = {
       showgrid: true, gridcolor: "#f0f0f0",
       linecolor: "#cccccc", tickfont: { size: 11, color: "#6b7280" },
-      tick0: from, dtick: "M12",
-      tickformat: "%b %Y",
     };
     const baseYAxis = {
       tickfont: { size: 11, color: "#6b7280" },
