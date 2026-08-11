@@ -593,14 +593,13 @@
     customFrom = null;
     customTo   = null;
     if (currentTab === "custom") {
-      // Reset date inputs to full range
       const today = new Date().toISOString().split("T")[0];
       document.getElementById("date-from").value = "2020-01-01";
       document.getElementById("date-to").value   = today;
     } else {
       setDateInputsToTab(currentTab);
-      renderPlotly();
     }
+    renderPlotly();
   }
 
   function renderPlotly() {
