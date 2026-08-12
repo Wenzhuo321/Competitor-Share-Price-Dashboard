@@ -150,11 +150,11 @@ def _load_cache_from_disk():
 # ── Data functions ────────────────────────────────────────────────────────────
 
 def fetch_all(tickers_dict: dict, start: str, end: str) -> dict:
-    """Download all tickers in one batch request to minimise rate-limit exposure."""
+    """Download all tickers in one batch request, retry if any ticker fails."""
     import time
     symbols = list(tickers_dict.values())
     labels  = list(tickers_dict.keys())
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             df = yf.download(
                 symbols, start=start, end=end,
@@ -176,10 +176,18 @@ def fetch_all(tickers_dict: dict, start: str, end: str) -> dict:
                     raw[label] = s.resample("W-FRI").last().ffill()
                 except Exception:
                     raw[label] = pd.Series(dtype=float)
+
+            # If any ticker missing, wait and retry the whole batch
+            missing = [l for l, s in raw.items() if s.empty]
+            if missing:
+                print(f"Attempt {attempt+1}: missing {missing}, retrying in 30s...")
+                if attempt < 4:
+                    time.sleep(30)
+                    continue
             return raw
         except Exception:
-            if attempt < 2:
-                time.sleep(10 + attempt * 10)
+            if attempt < 4:
+                time.sleep(30)
     return {label: pd.Series(dtype=float) for label in labels}
 
 
