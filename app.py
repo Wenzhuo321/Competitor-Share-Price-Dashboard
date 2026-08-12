@@ -126,32 +126,47 @@ _chart_lock = threading.Lock()  # matplotlib is not thread-safe
 
 # ── Data functions ────────────────────────────────────────────────────────────
 
-def fetch(ticker: str, start: str, end: str) -> pd.Series:
+def fetch_all(tickers_dict: dict, start: str, end: str) -> dict:
+    """Download all tickers in one batch request to minimise rate-limit exposure."""
     import time
+    symbols = list(tickers_dict.values())
+    labels  = list(tickers_dict.keys())
     for attempt in range(3):
         try:
             df = yf.download(
-                ticker, start=start, end=end,
-                interval="1d", auto_adjust=False, progress=False
+                symbols, start=start, end=end,
+                interval="1d", auto_adjust=False, progress=False,
+                group_by="ticker"
             )
-            s = df.get("Close")
-            if s is None or s.empty:
-                return pd.Series(dtype=float)
-            if isinstance(s, pd.DataFrame):
-                s = s.iloc[:, 0]
-            return s.resample("W-FRI").last().ffill()
+            raw = {}
+            for label, sym in zip(labels, symbols):
+                try:
+                    if len(symbols) == 1:
+                        s = df.get("Close")
+                    else:
+                        s = df[sym]["Close"] if sym in df.columns.get_level_values(0) else None
+                    if s is None or (hasattr(s, "empty") and s.empty):
+                        raw[label] = pd.Series(dtype=float)
+                        continue
+                    if isinstance(s, pd.DataFrame):
+                        s = s.iloc[:, 0]
+                    raw[label] = s.resample("W-FRI").last().ffill()
+                except Exception:
+                    raw[label] = pd.Series(dtype=float)
+            return raw
         except Exception:
             if attempt < 2:
-                time.sleep(5 + attempt * 5)
-    return pd.Series(dtype=float)
+                time.sleep(10 + attempt * 10)
+    return {label: pd.Series(dtype=float) for label in labels}
 
 
 def _build_prices_perf(start: str, end: str):
-    raw = {label: fetch(tck, start, end) for label, tck in TICKERS.items()}
+    raw = fetch_all(TICKERS, start, end)
 
     # Convert DAX from EUR to USD using weekly EURUSD=X rate
     if "DAX" in raw and not raw["DAX"].empty:
-        eurusd = fetch("EURUSD=X", start, end)
+        eurusd_raw = fetch_all({"EURUSD": "EURUSD=X"}, start, end)
+        eurusd = eurusd_raw.get("EURUSD", pd.Series(dtype=float))
         if not eurusd.empty:
             fx = eurusd.reindex(raw["DAX"].index).ffill().bfill()
             raw["DAX"] = raw["DAX"] * fx
