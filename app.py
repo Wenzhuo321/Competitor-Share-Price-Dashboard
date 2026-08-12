@@ -127,17 +127,23 @@ _chart_lock = threading.Lock()  # matplotlib is not thread-safe
 # ── Data functions ────────────────────────────────────────────────────────────
 
 def fetch(ticker: str, start: str, end: str) -> pd.Series:
-    df = yf.download(
-        ticker, start=start, end=end,
-        interval="1d", auto_adjust=False, progress=False
-    )
-    s = df.get("Close")
-    if s is None or s.empty:
-        return pd.Series(dtype=float)
-    # yfinance may return a DataFrame instead of Series for single ticker
-    if isinstance(s, pd.DataFrame):
-        s = s.iloc[:, 0]
-    return s.resample("W-FRI").last().ffill()
+    import time
+    for attempt in range(3):
+        try:
+            df = yf.download(
+                ticker, start=start, end=end,
+                interval="1d", auto_adjust=False, progress=False
+            )
+            s = df.get("Close")
+            if s is None or s.empty:
+                return pd.Series(dtype=float)
+            if isinstance(s, pd.DataFrame):
+                s = s.iloc[:, 0]
+            return s.resample("W-FRI").last().ffill()
+        except Exception:
+            if attempt < 2:
+                time.sleep(5 + attempt * 5)
+    return pd.Series(dtype=float)
 
 
 def _build_prices_perf(start: str, end: str):
@@ -150,11 +156,19 @@ def _build_prices_perf(start: str, end: str):
             fx = eurusd.reindex(raw["DAX"].index).ffill().bfill()
             raw["DAX"] = raw["DAX"] * fx
 
+    # Drop tickers that returned no data (e.g. rate-limited)
+    raw = {k: v for k, v in raw.items() if not v.empty}
+    if not raw:
+        raise RuntimeError("All tickers failed to download — likely rate limited")
+
     prices = pd.concat(list(raw.values()), axis=1, keys=list(raw.keys())).sort_index()
     prices.columns = prices.columns.get_level_values(0)
     prices = prices.dropna(how="all")
     prices = prices.ffill()
-    base_date = prices.dropna().index[0]
+    valid = prices.dropna()
+    if valid.empty:
+        raise RuntimeError("No valid price data after cleaning")
+    base_date = valid.index[0]
     perf = (prices / prices.loc[base_date] - 1) * 100
     return prices, perf
 
@@ -170,17 +184,21 @@ def refresh_cache() -> None:
     with _cache_lock:
         if not _cache_is_stale():
             return
-        today = datetime.now().strftime("%Y-%m-%d")
+        today      = datetime.now().strftime("%Y-%m-%d")
         year_start = datetime.now().strftime("%Y-01-01")
-
-        prices_2020, perf_2020 = _build_prices_perf("2020-01-01", today)
-        prices_ytd, perf_ytd = _build_prices_perf(year_start, today)
-
-        _cache["prices_2020"] = prices_2020
-        _cache["perf_2020"]   = perf_2020
-        _cache["prices_ytd"]  = prices_ytd
-        _cache["perf_ytd"]    = perf_ytd
-        _cache["updated_at"]  = datetime.now(timezone.utc)
+        try:
+            prices_2020, perf_2020 = _build_prices_perf("2020-01-01", today)
+            prices_ytd,  perf_ytd  = _build_prices_perf(year_start, today)
+            _cache["prices_2020"] = prices_2020
+            _cache["perf_2020"]   = perf_2020
+            _cache["prices_ytd"]  = prices_ytd
+            _cache["perf_ytd"]    = perf_ytd
+            _cache["updated_at"]  = datetime.now(timezone.utc)
+        except Exception as e:
+            # Keep serving stale cache rather than crashing
+            print(f"Cache refresh failed: {e}")
+            if _cache["updated_at"] is None:
+                raise  # First-time load must succeed
 
 
 # ── Chart building ────────────────────────────────────────────────────────────
