@@ -163,24 +163,22 @@ def fetch_all(tickers_dict: dict, start: str, end: str) -> dict:
 def _build_prices_perf(start: str, end: str):
     raw = fetch_all(TICKERS, start, end)
 
-    # Convert DAX from EUR to USD using weekly EURUSD=X rate
-    if "DAX" in raw and not raw["DAX"].empty:
-        eurusd_raw = fetch_all({"EURUSD": "EURUSD=X"}, start, end)
-        eurusd = eurusd_raw.get("EURUSD", pd.Series(dtype=float))
-        if not eurusd.empty:
-            fx = eurusd.reindex(raw["DAX"].index).ffill().bfill()
-            raw["DAX"] = raw["DAX"] * fx
+    # Check all tickers succeeded — if any missing, abort and keep stale cache
+    missing = [label for label, s in raw.items() if s.empty]
+    if missing:
+        raise RuntimeError(f"Missing data for: {missing} — keeping previous cache")
 
-    # Drop tickers that returned no data (e.g. rate-limited)
-    raw = {k: v for k, v in raw.items() if not v.empty}
-    if not raw:
-        raise RuntimeError("All tickers failed to download — likely rate limited")
+    # Convert DAX from EUR to USD using weekly EURUSD=X rate
+    eurusd_raw = fetch_all({"EURUSD": "EURUSD=X"}, start, end)
+    eurusd = eurusd_raw.get("EURUSD", pd.Series(dtype=float))
+    if not eurusd.empty:
+        fx = eurusd.reindex(raw["DAX"].index).ffill().bfill()
+        raw["DAX"] = raw["DAX"] * fx
 
     prices = pd.concat(list(raw.values()), axis=1, keys=list(raw.keys())).sort_index()
     prices.columns = prices.columns.get_level_values(0)
     prices = prices.dropna(how="all")
     prices = prices.ffill()
-    # Use thresh: require at least 1 column to have data (not all-NaN rows)
     valid = prices.dropna(thresh=1)
     if valid.empty:
         raise RuntimeError("No valid price data after cleaning")
