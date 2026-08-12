@@ -110,7 +110,7 @@ C2_PARAMS = {
     "tick_end":        None,
 }
 
-CACHE_TTL = 86400  # seconds (24 hours)
+CACHE_TTL = 86400  # seconds — fallback TTL if scheduler misses
 
 # ── Persistent cache (survives restarts) ─────────────────────────────────────
 
@@ -491,11 +491,33 @@ def get_final_perf(perf_2020: pd.DataFrame, perf_ytd: pd.DataFrame) -> dict:
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 
+async def _scheduled_refresh():
+    """Refresh cache every weekday at 06:00 Beijing time (UTC+8)."""
+    while True:
+        now = datetime.now(timezone.utc)
+        # Next 06:00 Beijing = 22:00 UTC previous day
+        target_utc_hour = 22
+        next_run = now.replace(hour=target_utc_hour, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run = next_run + pd.Timedelta(days=1)
+        # Skip to Monday if next_run lands on weekend (5=Sat, 6=Sun)
+        while next_run.weekday() >= 5:
+            next_run = next_run + pd.Timedelta(days=1)
+        wait_secs = (next_run - now).total_seconds()
+        print(f"Scheduler: next refresh at {next_run.isoformat()} UTC (in {wait_secs/3600:.1f}h)")
+        await asyncio.sleep(wait_secs)
+        # Double-check it's still a weekday after sleeping
+        if datetime.now(timezone.utc).weekday() < 5:
+            print("Scheduler: triggering scheduled cache refresh")
+            await asyncio.to_thread(refresh_cache)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # On startup: load previous cache from disk first, then try to refresh
     _load_cache_from_disk()
     asyncio.create_task(asyncio.to_thread(refresh_cache))
+    asyncio.create_task(_scheduled_refresh())
     yield
 
 
