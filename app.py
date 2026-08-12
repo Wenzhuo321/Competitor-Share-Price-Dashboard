@@ -180,7 +180,8 @@ def _build_prices_perf(start: str, end: str):
     prices.columns = prices.columns.get_level_values(0)
     prices = prices.dropna(how="all")
     prices = prices.ffill()
-    valid = prices.dropna()
+    # Use thresh: require at least 1 column to have data (not all-NaN rows)
+    valid = prices.dropna(thresh=1)
     if valid.empty:
         raise RuntimeError("No valid price data after cleaning")
     base_date = valid.index[0]
@@ -211,9 +212,7 @@ def refresh_cache() -> None:
             _cache["updated_at"]  = datetime.now(timezone.utc)
         except Exception as e:
             # Keep serving stale cache rather than crashing
-            print(f"Cache refresh failed: {e}")
-            if _cache["updated_at"] is None:
-                raise  # First-time load must succeed
+            print(f"Cache refresh failed (will retry on next request): {e}")
 
 
 # ── Chart building ────────────────────────────────────────────────────────────
