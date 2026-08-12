@@ -2,7 +2,6 @@ import matplotlib
 matplotlib.use("Agg")  # must be before any pyplot import
 
 import yfinance as yf
-yf.set_tz_cache_location(None)  # disable SQLite tz cache → avoids "database is locked"
 
 import asyncio
 import base64
