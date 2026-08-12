@@ -110,7 +110,7 @@ C2_PARAMS = {
     "tick_end":        None,
 }
 
-CACHE_TTL = 3600  # seconds
+CACHE_TTL = 86400  # seconds (24 hours)
 
 # ── Persistent cache (survives restarts) ─────────────────────────────────────
 
