@@ -111,17 +111,40 @@ C2_PARAMS = {
 
 CACHE_TTL = 3600  # seconds
 
-# ── In-memory cache ───────────────────────────────────────────────────────────
+# ── Persistent cache (survives restarts) ─────────────────────────────────────
+
+CACHE_FILE = BASE_DIR / "cache.pkl"
 
 _cache: dict = {
-    "perf_2020":  None,
+    "perf_2020":   None,
     "prices_2020": None,
-    "perf_ytd":   None,
-    "prices_ytd": None,
-    "updated_at": None,
+    "perf_ytd":    None,
+    "prices_ytd":  None,
+    "updated_at":  None,
 }
 _cache_lock = threading.Lock()
 _chart_lock = threading.Lock()  # matplotlib is not thread-safe
+
+
+def _save_cache_to_disk():
+    try:
+        import pickle
+        with open(CACHE_FILE, "wb") as f:
+            pickle.dump(_cache, f)
+    except Exception as e:
+        print(f"Failed to save cache to disk: {e}")
+
+
+def _load_cache_from_disk():
+    try:
+        import pickle
+        if CACHE_FILE.exists():
+            with open(CACHE_FILE, "rb") as f:
+                data = pickle.load(f)
+            _cache.update(data)
+            print(f"Loaded cache from disk (updated_at: {_cache['updated_at']})")
+    except Exception as e:
+        print(f"Failed to load cache from disk: {e}")
 
 
 # ── Data functions ────────────────────────────────────────────────────────────
@@ -208,6 +231,7 @@ def refresh_cache() -> None:
             _cache["prices_ytd"]  = prices_ytd
             _cache["perf_ytd"]    = perf_ytd
             _cache["updated_at"]  = datetime.now(timezone.utc)
+            _save_cache_to_disk()
         except Exception as e:
             # Keep serving stale cache rather than crashing
             print(f"Cache refresh failed (will retry on next request): {e}")
@@ -329,7 +353,8 @@ def build_chart(perf: pd.DataFrame, prices: pd.DataFrame, params: dict) -> str:
                 logo_widths[label]  = fw
 
         # Collision avoidance
-        final_vals    = {lbl: perf[lbl].dropna().iloc[-1] for lbl in perf.columns}
+        final_vals    = {lbl: perf[lbl].dropna().iloc[-1] for lbl in perf.columns
+                         if not perf[lbl].dropna().empty}
         sorted_labels = sorted(final_vals, key=final_vals.get, reverse=True)
         logo_x        = prices.index[-1] + LOGO_OFFSET
         PCT_X         = prices.index[-1] + PCT_OFFSET
@@ -449,7 +474,8 @@ def get_final_perf(perf_2020: pd.DataFrame, perf_ytd: pd.DataFrame) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # warm cache in background so the server responds immediately on first request
+    # On startup: load previous cache from disk first, then try to refresh
+    _load_cache_from_disk()
     asyncio.create_task(asyncio.to_thread(refresh_cache))
     yield
 
