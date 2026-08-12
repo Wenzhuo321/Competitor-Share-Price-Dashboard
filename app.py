@@ -195,10 +195,13 @@ def fetch_all(tickers_dict: dict, start: str, end: str) -> dict:
 def _build_prices_perf(start: str, end: str):
     raw = fetch_all(TICKERS, start, end)
 
-    # Check all tickers succeeded — if any missing, abort and keep stale cache
+    # Only keep tickers that succeeded
     missing = [label for label, s in raw.items() if s.empty]
     if missing:
-        raise RuntimeError(f"Missing data for: {missing} — keeping previous cache")
+        print(f"Warning: missing data for {missing} — proceeding with available tickers")
+    raw = {k: v for k, v in raw.items() if not v.empty}
+    if not raw:
+        raise RuntimeError("All tickers failed — keeping previous cache")
 
     # Convert DAX from EUR to USD — EURUSD is best-effort, skip if unavailable
     try:
