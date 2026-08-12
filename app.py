@@ -463,6 +463,12 @@ app.add_middleware(
 )
 
 
+@app.get("/health")
+async def health():
+    updated = _cache["updated_at"].isoformat() if _cache["updated_at"] else "not loaded"
+    return {"status": "ok", "cache_updated_at": updated}
+
+
 @app.get("/api/charts")
 async def get_charts():
     await asyncio.to_thread(refresh_cache)
