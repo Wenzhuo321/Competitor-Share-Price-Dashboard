@@ -1,6 +1,9 @@
 import matplotlib
 matplotlib.use("Agg")  # must be before any pyplot import
 
+import yfinance as yf
+yf.set_tz_cache_location(None)  # disable SQLite tz cache → avoids "database is locked"
+
 import asyncio
 import base64
 import io
@@ -13,7 +16,6 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import yfinance as yf
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -199,12 +201,19 @@ def _build_prices_perf(start: str, end: str):
     if missing:
         raise RuntimeError(f"Missing data for: {missing} — keeping previous cache")
 
-    # Convert DAX from EUR to USD using weekly EURUSD=X rate
-    eurusd_raw = fetch_all({"EURUSD": "EURUSD=X"}, start, end)
-    eurusd = eurusd_raw.get("EURUSD", pd.Series(dtype=float))
-    if not eurusd.empty:
-        fx = eurusd.reindex(raw["DAX"].index).ffill().bfill()
-        raw["DAX"] = raw["DAX"] * fx
+    # Convert DAX from EUR to USD — EURUSD is best-effort, skip if unavailable
+    try:
+        eurusd_df = yf.download("EURUSD=X", start=start, end=end,
+                                interval="1d", auto_adjust=False, progress=False)
+        eurusd_s = eurusd_df.get("Close")
+        if eurusd_s is not None and not eurusd_s.empty:
+            if isinstance(eurusd_s, pd.DataFrame):
+                eurusd_s = eurusd_s.iloc[:, 0]
+            eurusd = eurusd_s.resample("W-FRI").last().ffill()
+            fx = eurusd.reindex(raw["DAX"].index).ffill().bfill()
+            raw["DAX"] = raw["DAX"] * fx
+    except Exception as e:
+        print(f"EURUSD fetch skipped: {e} — DAX will remain in EUR")
 
     prices = pd.concat(list(raw.values()), axis=1, keys=list(raw.keys())).sort_index()
     prices.columns = prices.columns.get_level_values(0)
