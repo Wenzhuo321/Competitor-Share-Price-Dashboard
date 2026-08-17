@@ -459,6 +459,11 @@
         fetch(`${API_BASE}/api/charts` + qs),
         fetch(`${API_BASE}/api/data`   + qs),
       ]);
+      if (!chartsRes.ok || !dataRes.ok) {
+        document.getElementById("last-updated").textContent = "Data loading… retrying in 15s";
+        setTimeout(() => loadData(true), 15000);
+        return;
+      }
       const chartsJson = await chartsRes.json();
       const dataJson   = await dataRes.json();
       apiData = { ...dataJson, ...chartsJson };
@@ -708,7 +713,7 @@
     const tbody = document.getElementById("table-body");
     const rows = Object.entries(apiData.final_perf).map(([company, vals]) => {
       const pricePoints = apiData.prices_2020[company];
-      const latestPrice = pricePoints ? pricePoints[pricePoints.length - 1].value : null;
+      const latestPrice = (pricePoints && pricePoints.length > 0) ? pricePoints[pricePoints.length - 1].value : null;
       return {
         company,
         since2020: vals.since_2020,
@@ -780,10 +785,9 @@
   // ── Timestamp ─────────────────────────────────────────────────────────────
   function updateTimestamp(iso) {
     const d = new Date(iso);
-    const fmt = d.toLocaleDateString("en-US", {
-      month: "short", day: "numeric", year: "numeric",
-    });
-    document.getElementById("last-updated").textContent = `Data as of: ${fmt}`;
+    const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const time = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    document.getElementById("last-updated").textContent = `Data as of: ${date}, ${time}`;
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────

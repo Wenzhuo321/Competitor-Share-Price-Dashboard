@@ -174,7 +174,14 @@ def fetch_all(tickers_dict: dict, start: str, end: str) -> dict:
                         continue
                     if isinstance(s, pd.DataFrame):
                         s = s.iloc[:, 0]
-                    raw[label] = s.resample("W-FRI").last().ffill()
+                    weekly = s.resample("W-FRI").last().ffill()
+                    # Append the latest daily close so mid-week data isn't dropped
+                    last_daily = s.dropna()
+                    if not last_daily.empty and (weekly.empty or last_daily.index[-1] > weekly.index[-1]):
+                        extra = last_daily.iloc[[-1]]
+                        extra.index = pd.DatetimeIndex([last_daily.index[-1]])
+                        weekly = pd.concat([weekly, extra])
+                    raw[label] = weekly
                 except Exception:
                     raw[label] = pd.Series(dtype=float)
 
@@ -480,8 +487,8 @@ def serialize_perf(perf: pd.DataFrame) -> dict:
 def get_final_perf(perf_2020: pd.DataFrame, perf_ytd: pd.DataFrame) -> dict:
     result = {}
     for company in TICKERS:
-        s_2020 = perf_2020[company].dropna() if company in perf_2020 else pd.Series()
-        s_ytd  = perf_ytd[company].dropna()  if company in perf_ytd  else pd.Series()
+        s_2020 = perf_2020[company].dropna() if perf_2020 is not None and company in perf_2020 else pd.Series()
+        s_ytd  = perf_ytd[company].dropna()  if perf_ytd  is not None and company in perf_ytd  else pd.Series()
         result[company] = {
             "since_2020": round(float(s_2020.iloc[-1]), 1) if len(s_2020) else None,
             "ytd":        round(float(s_ytd.iloc[-1]),  1) if len(s_ytd)  else None,
@@ -540,6 +547,9 @@ async def health():
 async def get_charts():
     await asyncio.to_thread(refresh_cache)
 
+    if _cache["perf_2020"] is None:
+        return JSONResponse({"error": "Data not yet available, please retry shortly"}, status_code=503)
+
     today = datetime.now()
     year_start_str = today.strftime("%Y-01-01")
 
@@ -567,6 +577,9 @@ async def get_charts():
 @app.get("/api/data")
 async def get_data():
     await asyncio.to_thread(refresh_cache)
+
+    if _cache["perf_2020"] is None:
+        return JSONResponse({"error": "Data not yet available, please retry shortly"}, status_code=503)
 
     # Encode logos as base64 for the frontend legend
     logos_b64 = {}
